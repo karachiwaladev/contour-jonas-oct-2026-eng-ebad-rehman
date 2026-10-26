@@ -1,0 +1,120 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Todo</title>
+  <style>
+    :root {
+      --bg: #0f1221; --card: #191d30; --line: #2a2f48;
+      --text: #e8ebf5; --muted: #9aa2c0; --accent: #6c8cff; --danger: #ff6b7a;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0; min-height: 100vh; background: var(--bg); color: var(--text);
+      font: 16px/1.5 system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+      display: flex; justify-content: center; padding: 48px 16px;
+    }
+    main { width: 100%; max-width: 480px; }
+    h1 { font-size: 1.6rem; margin: 0 0 4px; }
+    p.sub { color: var(--muted); margin: 0 0 24px; font-size: .9rem; }
+    form { display: flex; gap: 8px; margin-bottom: 20px; }
+    input[type=text] {
+      flex: 1; padding: 12px 14px; border-radius: 10px; border: 1px solid var(--line);
+      background: var(--card); color: var(--text); font-size: 1rem;
+    }
+    input[type=text]:focus { outline: 2px solid var(--accent); border-color: transparent; }
+    button { cursor: pointer; border: none; border-radius: 10px; font-size: 1rem; }
+    .add { padding: 12px 18px; background: var(--accent); color: #fff; font-weight: 600; }
+    ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+    li {
+      display: flex; align-items: center; gap: 12px; padding: 12px 14px;
+      background: var(--card); border: 1px solid var(--line); border-radius: 10px;
+    }
+    li .box {
+      width: 22px; height: 22px; border-radius: 6px; border: 2px solid var(--muted);
+      display: grid; place-items: center; cursor: pointer; flex: none; background: none; color: var(--accent);
+    }
+    li.done .box { border-color: var(--accent); background: var(--accent); color: #fff; }
+    li .label { flex: 1; word-break: break-word; }
+    li.done .label { text-decoration: line-through; color: var(--muted); }
+    li .del { background: none; color: var(--danger); padding: 6px 8px; font-size: 1.1rem; }
+    .empty { color: var(--muted); text-align: center; padding: 32px 0; }
+    footer { color: var(--muted); font-size: .8rem; text-align: center; margin-top: 20px; }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>Todo</h1>
+    <p class="sub">Tasks are saved in your browser (localStorage) — no server, no account.</p>
+
+    <form id="form">
+      <input id="input" type="text" placeholder="Add a task…" autocomplete="off" aria-label="New task" />
+      <button class="add" type="submit">Add</button>
+    </form>
+
+    <ul id="list"></ul>
+    <p class="empty" id="empty" hidden>Nothing here yet. Add your first task above.</p>
+    <footer id="count"></footer>
+  </main>
+
+  <script>
+    // --- Client-side "database": localStorage-backed store ---
+    const KEY = "todo.items.v1";
+    const db = {
+      all() { try { return JSON.parse(localStorage.getItem(KEY)) || []; } catch { return []; } },
+      save(items) { localStorage.setItem(KEY, JSON.stringify(items)); },
+      add(text) { const items = db.all(); items.unshift({ id: genId(items), text, done: false }); db.save(items); },
+      toggle(id) { const items = db.all().map(i => i.id === id ? { ...i, done: !i.done } : i); db.save(items); },
+      remove(id) { db.save(db.all().filter(i => i.id !== id)); },
+    };
+    // Deterministic id (no Math.random / Date needed): one higher than current max.
+    function genId(items) { return items.reduce((m, i) => Math.max(m, i.id), 0) + 1; }
+
+    const list = document.getElementById("list");
+    const empty = document.getElementById("empty");
+    const count = document.getElementById("count");
+    const input = document.getElementById("input");
+
+    function render() {
+      const items = db.all();
+      list.innerHTML = "";
+      empty.hidden = items.length > 0;
+      for (const item of items) {
+        const li = document.createElement("li");
+        li.className = item.done ? "done" : "";
+
+        const box = document.createElement("button");
+        box.className = "box"; box.type = "button";
+        box.setAttribute("aria-label", item.done ? "Mark as not done" : "Mark as done");
+        box.textContent = item.done ? "✓" : "";
+        box.onclick = () => { db.toggle(item.id); render(); };
+
+        const label = document.createElement("span");
+        label.className = "label"; label.textContent = item.text;
+
+        const del = document.createElement("button");
+        del.className = "del"; del.type = "button"; del.setAttribute("aria-label", "Delete task");
+        del.textContent = "✕";
+        del.onclick = () => { db.remove(item.id); render(); };
+
+        li.append(box, label, del);
+        list.appendChild(li);
+      }
+      const left = items.filter(i => !i.done).length;
+      count.textContent = items.length ? `${left} of ${items.length} remaining` : "";
+    }
+
+    document.getElementById("form").addEventListener("submit", (e) => {
+      e.preventDefault();
+      const text = input.value.trim();
+      if (!text) return;
+      db.add(text);
+      input.value = "";
+      render();
+    });
+
+    render();
+  </script>
+</body>
+</html>

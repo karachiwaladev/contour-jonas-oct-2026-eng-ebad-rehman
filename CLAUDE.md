@@ -27,7 +27,7 @@ This file is the **index and nothing more**. Keep it **under 100 lines, always**
 
 | Project | Folder | Status | Docs |
 |---------|--------|--------|------|
-| _(none yet)_ | — | — | — |
+| Todo app | `todo/` | Live | `todo/CLAUDE.md` |
 
 ## Factory tooling
 
