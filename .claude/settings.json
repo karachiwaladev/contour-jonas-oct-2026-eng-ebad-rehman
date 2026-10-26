@@ -1,0 +1,23 @@
+{
+  "hooks": {
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$CLAUDE_PROJECT_DIR/.claude/hooks/log-session-prompts.js\"",
+            "shell": "bash",
+            "statusMessage": "Logging session prompts"
+          },
+          {
+            "type": "command",
+            "command": "node \"$CLAUDE_PROJECT_DIR/.claude/hooks/auto-commit-push.js\"",
+            "shell": "bash",
+            "statusMessage": "Auto commit & push",
+            "timeout": 120
+          }
+        ]
+      }
+    ]
+  }
+}
