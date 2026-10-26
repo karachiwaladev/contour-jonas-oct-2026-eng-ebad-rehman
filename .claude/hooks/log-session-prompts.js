@@ -1,14 +1,15 @@
 #!/usr/bin/env node
-// Stop hook: append new user prompts from the current session to a per-session
-// JSONL log. Runs each time Claude stops.
+// Stop hook: append new user prompts from the current session to a committed
+// JSONL prompt log. Runs each time Claude stops.
 //
 // Input : the Stop hook payload on stdin (JSON) -> { session_id, transcript_path, ... }
-// Output: <repo>/.claude/session-prompts/<session_id>.jsonl (git-ignored), one
-//         prompt per line: { "ts", "session_id", "uuid", "prompt" }
+// Output: <repo>/.claude/prompts.jsonl (committed), one prompt per line:
+//         { "timestamp": <iso>, "session_id": <id>, "uuid": <entry uuid>, "prompt": <text> }
 //
 // "Prompt" = a user-role transcript entry that is NOT injected meta (skips cron /
 // skill-expansion entries) and NOT a tool result. Dedup is by entry uuid, so each
-// Stop only appends prompts not already written. Failures never disrupt the stop.
+// Stop only appends prompts not already written (no duplicate timestamps).
+// Failures never disrupt the stop.
 
 const fs = require("fs");
 const path = require("path");
@@ -36,10 +37,8 @@ try {
   const sessionId = input.session_id || "unknown-session";
   if (!transcriptPath || !fs.existsSync(transcriptPath)) process.exit(0);
 
-  // repo-local output: this script lives in <repo>/.claude/hooks/
-  const outDir = path.join(__dirname, "..", "session-prompts");
-  fs.mkdirSync(outDir, { recursive: true });
-  const outFile = path.join(outDir, sessionId + ".jsonl");
+  // committed prompt log at <repo>/.claude/prompts.jsonl (this script lives in <repo>/.claude/hooks/)
+  const outFile = path.join(__dirname, "..", "prompts.jsonl");
 
   const seen = new Set();
   if (fs.existsSync(outFile)) {
@@ -58,7 +57,7 @@ try {
     const uuid = e.uuid || ((e.timestamp || "") + ":" + prompt.slice(0, 40));
     if (seen.has(uuid)) continue;
     seen.add(uuid);
-    out.push(JSON.stringify({ ts: e.timestamp || null, session_id: sessionId, uuid, prompt }));
+    out.push(JSON.stringify({ timestamp: e.timestamp || null, session_id: sessionId, uuid, prompt }));
   }
 
   if (out.length) fs.appendFileSync(outFile, out.join("\n") + "\n");
