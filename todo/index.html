@@ -7,7 +7,7 @@
   <style>
     :root {
       --bg: #0f1221; --card: #191d30; --line: #2a2f48; --chip: #242a44;
-      --text: #e8ebf5; --muted: #9aa2c0; --accent: #6c8cff; --danger: #ff6b7a; --warn: #ffb020;
+      --text: #e8ebf5; --muted: #9aa2c0; --accent: #6c8cff; --danger: #ff6b7a; --warn: #ffb020; --ok: #35c28e;
     }
     * { box-sizing: border-box; }
     body {
@@ -15,11 +15,11 @@
       font: 16px/1.5 system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
       display: flex; justify-content: center; padding: 48px 16px;
     }
-    main { width: 100%; max-width: 560px; }
+    main { width: 100%; max-width: 600px; }
     h1 { font-size: 1.6rem; margin: 0 0 4px; }
     p.sub { color: var(--muted); margin: 0 0 24px; font-size: .9rem; }
 
-    form { display: grid; grid-template-columns: 1fr auto; gap: 8px; margin-bottom: 18px; }
+    form#form { display: grid; grid-template-columns: 1fr auto; gap: 8px; margin-bottom: 18px; }
     .row2 { display: flex; flex-wrap: wrap; gap: 8px; grid-column: 1 / -1; }
     input, select, button { font-size: 1rem; border-radius: 10px; }
     input[type=text], input[type=date], select {
@@ -27,8 +27,7 @@
     }
     #text { width: 100%; }
     #due { flex: none; color-scheme: dark; }
-    #tags { flex: 1; min-width: 140px; }
-    #repeat { flex: none; }
+    #tags { flex: 1; min-width: 120px; }
     input:focus, select:focus { outline: 2px solid var(--accent); border-color: transparent; }
     button { cursor: pointer; border: none; }
     .add { padding: 11px 18px; background: var(--accent); color: #fff; font-weight: 600; }
@@ -52,10 +51,24 @@
     .badge.due { color: #cdd3ee; }
     .badge.overdue { background: rgba(255,107,122,.15); color: var(--danger); }
     .badge.repeat { background: rgba(255,176,32,.15); color: var(--warn); }
+    .badge.pri-high { background: rgba(255,107,122,.18); color: var(--danger); }
+    .badge.pri-medium { background: rgba(255,176,32,.16); color: var(--warn); }
+    .badge.pri-low { background: var(--chip); color: var(--muted); }
     .tag { font-size: .74rem; padding: 2px 8px; border-radius: 999px; background: rgba(108,140,255,.15); color: #aab9ff; cursor: pointer; }
-    li .del { background: none; color: var(--danger); padding: 4px 8px; font-size: 1.1rem; flex: none; }
+    li .actions { display: flex; gap: 4px; flex: none; }
+    li .iconbtn { background: none; padding: 4px 8px; font-size: 1.05rem; }
+    li .edit { color: var(--muted); }
+    li .del { color: var(--danger); }
     .empty { color: var(--muted); text-align: center; padding: 32px 0; }
     footer { color: var(--muted); font-size: .8rem; text-align: center; margin-top: 20px; }
+
+    /* inline edit */
+    li.editing { flex-direction: column; align-items: stretch; gap: 8px; }
+    .edit-grid { display: flex; flex-wrap: wrap; gap: 8px; }
+    .edit-grid input[type=text]{ flex: 1; min-width: 140px; }
+    .edit-actions { display: flex; gap: 8px; }
+    .save { background: var(--ok); color: #05261a; font-weight: 600; padding: 9px 16px; }
+    .cancel { background: var(--chip); color: var(--text); padding: 9px 16px; }
   </style>
 </head>
 <body>
@@ -75,6 +88,11 @@
           <option value="weekly">Weekly</option>
           <option value="monthly">Monthly</option>
         </select>
+        <select id="priority" aria-label="Priority">
+          <option value="high">High priority</option>
+          <option value="medium" selected>Medium priority</option>
+          <option value="low">Low priority</option>
+        </select>
       </div>
     </form>
 
@@ -85,6 +103,12 @@
         <button type="button" data-status="completed">Completed</button>
       </div>
       <div class="spacer"></div>
+      <select id="priorityFilter" aria-label="Filter by priority">
+        <option value="">All priorities</option>
+        <option value="high">High</option>
+        <option value="medium">Medium</option>
+        <option value="low">Low</option>
+      </select>
       <select id="tagFilter" aria-label="Filter by tag"><option value="">All tags</option></select>
     </div>
 
@@ -94,19 +118,19 @@
   </main>
 
   <script>
-    // --- Client-side "database": localStorage, schema v3 (adds recurrence) ---
-    // v1: {id,text,done}  ->  v2: +due,+tags  ->  v3: +repeat
-    const KEY = "todo.items.v3";
-    const K2 = "todo.items.v2";
-    const K1 = "todo.items.v1";
-    const REPEATS = { none: null, daily: 1, weekly: 7, monthly: "month" };
+    // --- Client-side "database": localStorage, schema v4 (adds priority) ---
+    // v1:{id,text,done} -> v2:+due,+tags -> v3:+repeat -> v4:+priority
+    const KEY = "todo.items.v4";
+    const OLD = { v3: "todo.items.v3", v2: "todo.items.v2", v1: "todo.items.v1" };
+    const PRIORITIES = ["high", "medium", "low"];
+    const PRI_LABEL = { high: "High", medium: "Medium", low: "Low" };
+    const PRI_ORDER = { high: 0, medium: 1, low: 2 };
 
     function fmt(d) {
       return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
     }
     const todayStr = () => fmt(new Date());
 
-    // next due date for a recurring task: advance its due date (or today) by the cadence
     function advanceDate(due, repeat) {
       const base = due ? new Date(due + "T00:00:00") : new Date();
       const d = new Date(base);
@@ -117,31 +141,33 @@
     }
 
     function load() {
-      let raw = localStorage.getItem(KEY);
+      const raw = localStorage.getItem(KEY);
       if (raw != null) { try { return JSON.parse(raw) || []; } catch { return []; } }
-      // migrate forward from the newest older schema found
-      let migrated = null;
-      const v2 = localStorage.getItem(K2);
-      if (v2 != null) {
-        try { migrated = (JSON.parse(v2) || []).map(i => ({ ...i, repeat: i.repeat || "none" })); } catch {}
-      } else {
-        const v1 = localStorage.getItem(K1);
-        if (v1 != null) {
-          try { migrated = (JSON.parse(v1) || []).map(i => ({ id: i.id, text: i.text, done: !!i.done, due: null, tags: [], repeat: "none" })); } catch {}
-        }
-      }
-      migrated = migrated || [];
-      if (migrated.length) localStorage.setItem(KEY, JSON.stringify(migrated));
-      return migrated;
+      // migrate forward from the newest older schema present
+      let items = null;
+      const v3 = localStorage.getItem(OLD.v3);
+      const v2 = localStorage.getItem(OLD.v2);
+      const v1 = localStorage.getItem(OLD.v1);
+      try {
+        if (v3 != null) items = (JSON.parse(v3) || []).map(i => ({ ...i, priority: i.priority || "medium" }));
+        else if (v2 != null) items = (JSON.parse(v2) || []).map(i => ({ ...i, repeat: i.repeat || "none", priority: "medium" }));
+        else if (v1 != null) items = (JSON.parse(v1) || []).map(i => ({ id: i.id, text: i.text, done: !!i.done, due: null, tags: [], repeat: "none", priority: "medium" }));
+      } catch { items = null; }
+      items = items || [];
+      if (items.length) localStorage.setItem(KEY, JSON.stringify(items));
+      return items;
     }
 
     const db = {
       all() { return load(); },
       save(items) { localStorage.setItem(KEY, JSON.stringify(items)); },
-      add(text, due, tags, repeat) {
+      add(text, due, tags, repeat, priority) {
         const items = db.all();
-        items.unshift({ id: genId(items), text, done: false, due: due || null, tags: tags || [], repeat: repeat || "none" });
+        items.unshift({ id: genId(items), text, done: false, due: due || null, tags: tags || [], repeat: repeat || "none", priority: priority || "medium" });
         db.save(items);
+      },
+      update(id, fields) {
+        db.save(db.all().map(i => i.id === id ? { ...i, ...fields } : i));
       },
       toggle(id) {
         const items = db.all();
@@ -150,12 +176,11 @@
         const it = items[idx];
         const nowDone = !it.done;
         items[idx] = { ...it, done: nowDone };
-        // completing a recurring task spawns the next occurrence
         if (nowDone && it.repeat && it.repeat !== "none") {
           items.unshift({
             id: genId(items), text: it.text, done: false,
             due: advanceDate(it.due, it.repeat),
-            tags: it.tags ? [...it.tags] : [], repeat: it.repeat,
+            tags: it.tags ? [...it.tags] : [], repeat: it.repeat, priority: it.priority || "medium",
           });
         }
         db.save(items);
@@ -167,18 +192,23 @@
     // --- UI state ---
     let statusFilter = "all";
     let tagFilter = "";
+    let priorityFilter = "";
+    let editingId = null;
 
     const list = document.getElementById("list");
     const empty = document.getElementById("empty");
     const count = document.getElementById("count");
     const tagFilterEl = document.getElementById("tagFilter");
+    const priorityFilterEl = document.getElementById("priorityFilter");
     const REPEAT_LABEL = { daily: "Daily", weekly: "Weekly", monthly: "Monthly" };
 
+    function parseTags(s) { return s.split(",").map(t => t.trim().replace(/^#/, "")).filter(Boolean); }
     function allTags(items) { return [...new Set(items.flatMap(i => i.tags || []))].sort(); }
     function matches(i) {
       if (statusFilter === "active" && i.done) return false;
       if (statusFilter === "completed" && !i.done) return false;
       if (tagFilter && !(i.tags || []).includes(tagFilter)) return false;
+      if (priorityFilter && (i.priority || "medium") !== priorityFilter) return false;
       return true;
     }
 
@@ -191,10 +221,46 @@
       tagFilter = tagFilterEl.value;
     }
 
+    function selOptions(values, labels, selected) {
+      return values.map(v => `<option value="${v}"${v === selected ? " selected" : ""}>${labels[v]}</option>`).join("");
+    }
+
+    function renderEditRow(li, item) {
+      li.className = "editing";
+      li.innerHTML = `
+        <input type="text" class="e-text" value="" aria-label="Edit text" />
+        <div class="edit-grid">
+          <input type="date" class="e-due" style="color-scheme:dark" aria-label="Edit due date" />
+          <input type="text" class="e-tags" placeholder="tags, comma separated" aria-label="Edit tags" />
+          <select class="e-repeat" aria-label="Edit repeat">${selOptions(["none","daily","weekly","monthly"],{none:"No repeat",daily:"Daily",weekly:"Weekly",monthly:"Monthly"}, item.repeat||"none")}</select>
+          <select class="e-priority" aria-label="Edit priority">${selOptions(PRIORITIES, {high:"High priority",medium:"Medium priority",low:"Low priority"}, item.priority||"medium")}</select>
+        </div>
+        <div class="edit-actions">
+          <button type="button" class="save">Save</button>
+          <button type="button" class="cancel">Cancel</button>
+        </div>`;
+      li.querySelector(".e-text").value = item.text;
+      li.querySelector(".e-due").value = item.due || "";
+      li.querySelector(".e-tags").value = (item.tags || []).join(", ");
+      li.querySelector(".save").onclick = () => {
+        const text = li.querySelector(".e-text").value.trim();
+        if (!text) return;
+        db.update(item.id, {
+          text,
+          due: li.querySelector(".e-due").value || null,
+          tags: parseTags(li.querySelector(".e-tags").value),
+          repeat: li.querySelector(".e-repeat").value,
+          priority: li.querySelector(".e-priority").value,
+        });
+        editingId = null; render();
+      };
+      li.querySelector(".cancel").onclick = () => { editingId = null; render(); };
+    }
+
     function render() {
       const items = db.all();
       renderTagFilter(items);
-      const shown = items.filter(matches);
+      const shown = items.filter(matches).slice().sort((a, b) => (PRI_ORDER[a.priority || "medium"]) - (PRI_ORDER[b.priority || "medium"]));
       const today = todayStr();
 
       list.innerHTML = "";
@@ -202,6 +268,8 @@
 
       for (const item of shown) {
         const li = document.createElement("li");
+        if (editingId === item.id) { renderEditRow(li, item); list.appendChild(li); continue; }
+
         li.className = item.done ? "done" : "";
 
         const box = document.createElement("button");
@@ -218,6 +286,11 @@
 
         const meta = document.createElement("div");
         meta.className = "meta";
+        const pri = item.priority || "medium";
+        const pb = document.createElement("span");
+        pb.className = "badge pri-" + pri;
+        pb.textContent = (pri === "high" ? "⬆ " : pri === "low" ? "⬇ " : "• ") + PRI_LABEL[pri];
+        meta.appendChild(pb);
         if (item.due) {
           const overdue = !item.done && item.due < today;
           const b = document.createElement("span");
@@ -238,19 +311,26 @@
           chip.onclick = () => { tagFilter = t; tagFilterEl.value = t; render(); };
           meta.appendChild(chip);
         }
-        if (meta.children.length) body.appendChild(meta);
+        body.appendChild(meta);
 
+        const actions = document.createElement("div");
+        actions.className = "actions";
+        const edit = document.createElement("button");
+        edit.className = "iconbtn edit"; edit.type = "button"; edit.setAttribute("aria-label", "Edit task");
+        edit.textContent = "✎";
+        edit.onclick = () => { editingId = item.id; render(); };
         const del = document.createElement("button");
-        del.className = "del"; del.type = "button"; del.setAttribute("aria-label", "Delete task");
+        del.className = "iconbtn del"; del.type = "button"; del.setAttribute("aria-label", "Delete task");
         del.textContent = "✕";
         del.onclick = () => { db.remove(item.id); render(); };
+        actions.append(edit, del);
 
-        li.append(box, body, del);
+        li.append(box, body, actions);
         list.appendChild(li);
       }
 
       const left = items.filter(i => !i.done).length;
-      const filtered = (statusFilter !== "all" || tagFilter) ? ` · showing ${shown.length}` : "";
+      const filtered = (statusFilter !== "all" || tagFilter || priorityFilter) ? ` · showing ${shown.length}` : "";
       count.textContent = items.length ? `${left} of ${items.length} remaining${filtered}` : "";
     }
 
@@ -261,11 +341,11 @@
       const dueEl = document.getElementById("due");
       const tagsEl = document.getElementById("tags");
       const repeatEl = document.getElementById("repeat");
+      const priorityEl = document.getElementById("priority");
       const text = textEl.value.trim();
       if (!text) return;
-      const tags = tagsEl.value.split(",").map(s => s.trim().replace(/^#/, "")).filter(Boolean);
-      db.add(text, dueEl.value || null, tags, repeatEl.value);
-      textEl.value = ""; dueEl.value = ""; tagsEl.value = ""; repeatEl.value = "none";
+      db.add(text, dueEl.value || null, parseTags(tagsEl.value), repeatEl.value, priorityEl.value);
+      textEl.value = ""; dueEl.value = ""; tagsEl.value = ""; repeatEl.value = "none"; priorityEl.value = "medium";
       render();
     });
 
@@ -278,6 +358,7 @@
     });
 
     tagFilterEl.addEventListener("change", () => { tagFilter = tagFilterEl.value; render(); });
+    priorityFilterEl.addEventListener("change", () => { priorityFilter = priorityFilterEl.value; render(); });
 
     render();
   </script>
