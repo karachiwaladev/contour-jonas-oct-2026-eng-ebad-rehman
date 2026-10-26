@@ -20,14 +20,15 @@
     p.sub { color: var(--muted); margin: 0 0 24px; font-size: .9rem; }
 
     form { display: grid; grid-template-columns: 1fr auto; gap: 8px; margin-bottom: 18px; }
-    .row2 { display: flex; gap: 8px; grid-column: 1 / -1; }
+    .row2 { display: flex; flex-wrap: wrap; gap: 8px; grid-column: 1 / -1; }
     input, select, button { font-size: 1rem; border-radius: 10px; }
     input[type=text], input[type=date], select {
       padding: 11px 13px; border: 1px solid var(--line); background: var(--card); color: var(--text);
     }
     #text { width: 100%; }
     #due { flex: none; color-scheme: dark; }
-    #tags { flex: 1; }
+    #tags { flex: 1; min-width: 140px; }
+    #repeat { flex: none; }
     input:focus, select:focus { outline: 2px solid var(--accent); border-color: transparent; }
     button { cursor: pointer; border: none; }
     .add { padding: 11px 18px; background: var(--accent); color: #fff; font-weight: 600; }
@@ -50,6 +51,7 @@
     .badge { font-size: .74rem; padding: 2px 8px; border-radius: 999px; background: var(--chip); color: var(--muted); }
     .badge.due { color: #cdd3ee; }
     .badge.overdue { background: rgba(255,107,122,.15); color: var(--danger); }
+    .badge.repeat { background: rgba(255,176,32,.15); color: var(--warn); }
     .tag { font-size: .74rem; padding: 2px 8px; border-radius: 999px; background: rgba(108,140,255,.15); color: #aab9ff; cursor: pointer; }
     li .del { background: none; color: var(--danger); padding: 4px 8px; font-size: 1.1rem; flex: none; }
     .empty { color: var(--muted); text-align: center; padding: 32px 0; }
@@ -67,6 +69,12 @@
       <div class="row2">
         <input id="due" type="date" aria-label="Due date" />
         <input id="tags" type="text" placeholder="tags, comma separated" autocomplete="off" aria-label="Tags" />
+        <select id="repeat" aria-label="Repeat">
+          <option value="none">No repeat</option>
+          <option value="daily">Daily</option>
+          <option value="weekly">Weekly</option>
+          <option value="monthly">Monthly</option>
+        </select>
       </div>
     </form>
 
@@ -86,53 +94,87 @@
   </main>
 
   <script>
-    // --- Client-side "database": localStorage, schema v2 (adds due date + tags) ---
-    const KEY = "todo.items.v2";
-    const OLD = "todo.items.v1";
+    // --- Client-side "database": localStorage, schema v3 (adds recurrence) ---
+    // v1: {id,text,done}  ->  v2: +due,+tags  ->  v3: +repeat
+    const KEY = "todo.items.v3";
+    const K2 = "todo.items.v2";
+    const K1 = "todo.items.v1";
+    const REPEATS = { none: null, daily: 1, weekly: 7, monthly: "month" };
+
+    function fmt(d) {
+      return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+    }
+    const todayStr = () => fmt(new Date());
+
+    // next due date for a recurring task: advance its due date (or today) by the cadence
+    function advanceDate(due, repeat) {
+      const base = due ? new Date(due + "T00:00:00") : new Date();
+      const d = new Date(base);
+      if (repeat === "daily") d.setDate(d.getDate() + 1);
+      else if (repeat === "weekly") d.setDate(d.getDate() + 7);
+      else if (repeat === "monthly") d.setMonth(d.getMonth() + 1);
+      return fmt(d);
+    }
 
     function load() {
       let raw = localStorage.getItem(KEY);
-      if (raw == null) {
-        // migrate v1 (text/done only) -> v2 shape
-        try {
-          const old = JSON.parse(localStorage.getItem(OLD)) || [];
-          const migrated = old.map(i => ({ id: i.id, text: i.text, done: !!i.done, due: null, tags: [] }));
-          if (migrated.length) localStorage.setItem(KEY, JSON.stringify(migrated));
-          return migrated;
-        } catch { return []; }
+      if (raw != null) { try { return JSON.parse(raw) || []; } catch { return []; } }
+      // migrate forward from the newest older schema found
+      let migrated = null;
+      const v2 = localStorage.getItem(K2);
+      if (v2 != null) {
+        try { migrated = (JSON.parse(v2) || []).map(i => ({ ...i, repeat: i.repeat || "none" })); } catch {}
+      } else {
+        const v1 = localStorage.getItem(K1);
+        if (v1 != null) {
+          try { migrated = (JSON.parse(v1) || []).map(i => ({ id: i.id, text: i.text, done: !!i.done, due: null, tags: [], repeat: "none" })); } catch {}
+        }
       }
-      try { return JSON.parse(raw) || []; } catch { return []; }
+      migrated = migrated || [];
+      if (migrated.length) localStorage.setItem(KEY, JSON.stringify(migrated));
+      return migrated;
     }
 
     const db = {
       all() { return load(); },
       save(items) { localStorage.setItem(KEY, JSON.stringify(items)); },
-      add(text, due, tags) {
+      add(text, due, tags, repeat) {
         const items = db.all();
-        items.unshift({ id: genId(items), text, done: false, due: due || null, tags: tags || [] });
+        items.unshift({ id: genId(items), text, done: false, due: due || null, tags: tags || [], repeat: repeat || "none" });
         db.save(items);
       },
-      toggle(id) { db.save(db.all().map(i => i.id === id ? { ...i, done: !i.done } : i)); },
+      toggle(id) {
+        const items = db.all();
+        const idx = items.findIndex(i => i.id === id);
+        if (idx < 0) return;
+        const it = items[idx];
+        const nowDone = !it.done;
+        items[idx] = { ...it, done: nowDone };
+        // completing a recurring task spawns the next occurrence
+        if (nowDone && it.repeat && it.repeat !== "none") {
+          items.unshift({
+            id: genId(items), text: it.text, done: false,
+            due: advanceDate(it.due, it.repeat),
+            tags: it.tags ? [...it.tags] : [], repeat: it.repeat,
+          });
+        }
+        db.save(items);
+      },
       remove(id) { db.save(db.all().filter(i => i.id !== id)); },
     };
     function genId(items) { return items.reduce((m, i) => Math.max(m, i.id), 0) + 1; }
 
     // --- UI state ---
-    let statusFilter = "all";   // all | active | completed
-    let tagFilter = "";          // "" = all tags
+    let statusFilter = "all";
+    let tagFilter = "";
 
     const list = document.getElementById("list");
     const empty = document.getElementById("empty");
     const count = document.getElementById("count");
     const tagFilterEl = document.getElementById("tagFilter");
+    const REPEAT_LABEL = { daily: "Daily", weekly: "Weekly", monthly: "Monthly" };
 
-    function todayStr() {
-      const d = new Date();
-      return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
-    }
-    function allTags(items) {
-      return [...new Set(items.flatMap(i => i.tags || []))].sort();
-    }
+    function allTags(items) { return [...new Set(items.flatMap(i => i.tags || []))].sort(); }
     function matches(i) {
       if (statusFilter === "active" && i.done) return false;
       if (statusFilter === "completed" && !i.done) return false;
@@ -183,6 +225,12 @@
           b.textContent = (overdue ? "⚠ due " : "📅 ") + item.due;
           meta.appendChild(b);
         }
+        if (item.repeat && item.repeat !== "none") {
+          const r = document.createElement("span");
+          r.className = "badge repeat";
+          r.textContent = "🔁 " + (REPEAT_LABEL[item.repeat] || item.repeat);
+          meta.appendChild(r);
+        }
         for (const t of (item.tags || [])) {
           const chip = document.createElement("span");
           chip.className = "tag"; chip.textContent = "#" + t;
@@ -212,11 +260,12 @@
       const textEl = document.getElementById("text");
       const dueEl = document.getElementById("due");
       const tagsEl = document.getElementById("tags");
+      const repeatEl = document.getElementById("repeat");
       const text = textEl.value.trim();
       if (!text) return;
       const tags = tagsEl.value.split(",").map(s => s.trim().replace(/^#/, "")).filter(Boolean);
-      db.add(text, dueEl.value || null, tags);
-      textEl.value = ""; dueEl.value = ""; tagsEl.value = "";
+      db.add(text, dueEl.value || null, tags, repeatEl.value);
+      textEl.value = ""; dueEl.value = ""; tagsEl.value = ""; repeatEl.value = "none";
       render();
     });
 
