@@ -3,24 +3,28 @@ name: factory-loop
 description: >-
   Automated GitHub issue "factory line" for a repository. Processes open issues
   end-to-end by TAKING ACTION (creating files, projects, features — not just
-  answering): claim with 👀, do the work, verify it, comment the result, then
-  close the issue. Build/feature tickets go through clarify → plan → approval →
-  build → browser-verify (chrome-devtools) → screenshot-on-ticket. Changes are
-  committed & pushed automatically by a Stop hook. Never takes destructive
-  actions. Use when the user wants to "work through", "process", "run a factory
-  loop over", or otherwise handle the issues in a GitHub repo. Takes a repo as
-  owner/name or a GitHub URL.
+  answering): claim with 👀, do the work, verify it, and report. Build/feature
+  tickets go through clarify → plan → approval → build (on a branch) →
+  browser-verify (chrome-devtools) → screenshots → open a PR → WAIT for manual
+  review & approval → only then close. Pure-question tickets are answered and
+  closed directly. Changes are committed & pushed automatically by a Stop hook.
+  Never takes destructive actions. Use when the user wants to "work through",
+  "process", "run a factory loop over", or otherwise handle the issues in a
+  GitHub repo. Takes a repo as owner/name or a GitHub URL.
 ---
 
 # Factory Loop
 
-An assembly line for GitHub issues. Given a repository, it works each open issue
-through the same stations — **claim → do the work → verify → answer → close** —
-and can repeat on an interval to catch new ones.
+An assembly line for GitHub issues. Each open issue runs through the same
+stations. The path depends on the ticket type:
+
+- **Pure question** → claim → research → answer → close.
+- **Build / feature / file / project** → claim → clarify → plan → **approval** →
+  build (on a branch) → verify in browser → screenshots → **open a PR** → **wait
+  for manual review & approval** → close.
 
 **Core principle: take action, don't just answer.** If a ticket asks for a file,
-a project, a feature, or a change, *build it* — don't merely describe it. The
-only exception is a ticket that is genuinely a pure question.
+a project, a feature, or a change, *build it* — don't merely describe it.
 
 ## Inputs
 
@@ -30,7 +34,7 @@ only exception is a ticket that is genuinely a pure question.
 
 ## Preflight: authentication
 
-Writes (reactions, comments, close/reopen) need an authenticated `gh`; reading a
+Writes (reactions, comments, PRs, close) need an authenticated `gh`; reading a
 public repo does not.
 
 1. `gh auth status`. If not logged in, ask the user to run `! gh auth login`.
@@ -51,9 +55,11 @@ gh issue list --repo <owner>/<name> --state open --limit 100
 Public-repo fallback if `gh` can't read: `curl -s ".../issues?state=open&per_page=100"`,
 ignoring any item with a `pull_request` key.
 
-**Skip issues already carrying your 👀** — EXCEPT a 👀-claimed issue that is still
-open and not yet commented/closed: that one was claimed but interrupted, so
-*finish* it rather than skip it.
+**Skip issues already carrying your 👀** — EXCEPT a 👀-claimed issue that is open
+and **not yet waiting on a human**: i.e. it has no posted plan awaiting approval
+and no open PR awaiting review. Such an issue was claimed but interrupted mid-work
+— *finish* it. A claimed issue that already has a pending plan or an open PR is
+**awaiting you** → skip it (don't re-do or close it).
 
 ### 1. Claim it — 👀 react
 
@@ -62,85 +68,78 @@ gh api --method POST repos/<owner>/<name>/issues/<n>/reactions \
   -H "Accept: application/vnd.github+json" -f content=eyes
 ```
 
-### 2. Do the work — classify first
+### 2. Classify
 
-- **Pure question** → research and answer in the comment (step 4).
-- **Build / feature / file / project** → run the **Build workflow** below. One
-  project per folder, per the repo's root `CLAUDE.md`; register new projects in
-  that index and keep it under 100 lines.
-
-### 3. Verify
-
-For anything with runtime behavior (a web app/page/feature), **verify it in a
-real browser with chrome-devtools** before closing — see the Build workflow.
-For non-runtime work, sanity-check the output (e.g. simulate core logic).
-
-### 4. Answer — comment the result
-
-```bash
-gh issue comment <n> --repo <owner>/<name> --body "<what you did, links, screenshot>"
-```
-State what was built/changed, link the files, and embed the screenshot (Build
-workflow). Multi-line bodies: PowerShell single-quoted here-string, or Bash
-`--body @'...'@`.
-
-### 5. Close it
-
-```bash
-gh issue close <n> --repo <owner>/<name>
-```
+- **Pure question** → research, **comment** the answer, **close**. Done.
+- **Build / feature / file / project** → run the **Build workflow** below.
 
 ## Build workflow (build / feature tickets)
+
+One project per folder, per the repo's root `CLAUDE.md`; register new projects in
+that index and keep it under 100 lines.
 
 1. **Clarify.** Ask questions to surface and confirm assumptions before building.
 2. **Plan.** Propose a concise plan of what you'll build and how.
 3. **Get approval.** Do **not** start building until the plan is approved.
-4. **Build.** Implement it. Extend existing projects non-destructively; migrate
+4. **Branch.** Create and check out a feature branch, e.g.
+   `git checkout -b ticket-<n>-<slug>`. All build work happens here, never
+   directly on `main` (the Stop hook then auto-pushes *this* branch).
+5. **Build.** Implement it. Extend existing projects non-destructively; migrate
    data forward (preserve old data) rather than wiping it.
-5. **Browser-verify with chrome-devtools.** Open the running app/feature (a local
-   `file://` path or dev server), exercise the new behavior, and confirm it works.
-6. **Screenshot on the ticket.** Save screenshot(s) into the repo (e.g.
-   `<project>/screenshots/ticket-<n>-*.png`) and embed them in the closing
-   comment via a raw URL:
-   `![ticket-<n>](https://raw.githubusercontent.com/<owner>/<name>/<branch>/<path>.png)`.
+6. **Browser-verify with chrome-devtools.** Open the running app/feature (dev
+   server or served locally), exercise the new behavior, and confirm it works.
+7. **Screenshots.** Save screenshot(s) into the repo (e.g.
+   `<project>/screenshots/ticket-<n>-*.png`).
+8. **Open a PR.** `gh pr create --base main --head ticket-<n>-<slug>` with a body
+   that summarizes the work, embeds the screenshots (raw URLs), and includes
+   `Closes #<n>` so the merge auto-closes the ticket. Then **comment on the issue
+   linking the PR**.
+9. **WAIT for manual review & approval.** Do **not** merge and do **not** close
+   the ticket yourself. The human reviews, approves, and merges the PR; the merge
+   (via `Closes #<n>`) closes the ticket. Until then the issue stays open &
+   claimed, and later loop runs skip it (awaiting review).
 
 ### Attended vs unattended
 
 The loop often runs unattended on a cron, where no one can answer questions or
-approve a plan. So:
+approve. So:
 
 - **Unattended (cron/loop firing):** for a build ticket, **pause for approval** —
   claim it (👀), post the clarifying questions **and** the proposed plan as an
-  issue comment, and **stop there**. Do not build, do not close. The ticket stays
-  open awaiting the user. Next run: if the user has replied/approved in the
-  thread, proceed to build/verify/screenshot/close; otherwise skip (still claimed).
-- **Attended (user invoked `/factory-loop` and is present):** ask the questions
-  and get plan approval in the live session, then build straight through.
+  issue comment, and **stop there**. Do not build. Next run: if the user approved
+  in the thread, proceed through build → verify → screenshots → **open PR** →
+  stop (awaiting review); otherwise skip (still awaiting). Never close without an
+  approved, merged PR.
+- **Attended (user invoked `/factory-loop` and is present):** get plan approval in
+  the live session, build straight through, open the PR, then hand off for review.
 
-Pure-question tickets never need approval — answer and close in either mode.
+Pure-question tickets never need approval or a PR — answer and close in either mode.
 
 ## Commit & push
 
 Committing and pushing is **automatic** — a `Stop` hook commits all changes and
-pushes the current branch on every stop. So the loop's job is to *create the
-files and update the issue*; you do not need to run `git commit`/`git push`
-yourself. Consequence: a closing comment should reference `main` generally rather
-than a specific commit hash (the push lands when the turn stops), and embedded
-screenshot links resolve once that push completes.
+pushes the **current branch** on every stop. So for build work, create the feature
+branch *first* (step 4) and the hook will push it; you don't run `git commit`/
+`git push` yourself. `main` is only updated by **merging an approved PR**, never
+by a direct push of ticket work. Embedded screenshot links resolve once the
+branch push completes.
 
 ## Guardrails — never destructive
 
 - **No destruction.** Never delete or overwrite files/projects you didn't create
   without explicit approval; never `reset --hard`, force-push, rebase, rewrite
-  history, or delete branches/tags/issues. Only additive git ops (handled by the
-  Stop hook).
+  history, or delete branches/tags/issues. Only additive git ops.
+- **No self-approval / self-merge.** Do not merge PRs or close build tickets
+  yourself — a human reviews, approves, and merges.
 - **Extend, don't clobber.** Enhancing a project means adding to it and migrating
   data forward, not replacing working code or wiping stored data.
-- **Confirm before bulk writes.** Reacting is cheap; mass comment/close is not.
+- **Confirm before bulk writes.** Reacting is cheap; mass comment/PR is not.
   Summarize across N issues and get a go-ahead unless told "process everything".
-- **Idempotency.** Re-list before acting so you don't double-process an issue.
+- **Idempotency.** Re-list before acting so you don't double-process an issue, and
+  check for an existing plan/PR before re-doing work.
 - **Report faithfully.** List each issue and what happened (claimed / built /
-  verified / answered / closed / paused-for-approval / skipped-and-why) with URLs.
+  verified / PR-opened / paused-for-approval / awaiting-review / answered /
+  closed / skipped-and-why) with URLs.
 - **Right account.** Use a GitHub account with write access to the target repo.
 
 ## On a loop
@@ -148,6 +147,7 @@ screenshot links resolve once that push completes.
 ```
 /loop 10m run factory-loop over <owner>/<name>
 ```
-Each firing re-fetches open issues and runs the line on anything new, pausing
-build tickets for approval as above. Stop with CronDelete (the loop reports the
-job ID) or by telling Claude to "stop the loop".
+Each firing re-fetches open issues and runs the line on anything new — pausing
+build tickets for plan approval, and leaving opened PRs for human review. Stop
+with CronDelete (the loop reports the job ID) or by telling Claude to "stop the
+loop".
