@@ -2,44 +2,44 @@
 name: factory-loop
 description: >-
   Automated GitHub issue "factory line" for a repository. Processes open issues
-  end-to-end: react 👀 to signal work-in-progress, research/do the requested
-  work, post the answer as a comment, then close the issue. Optionally runs on a
-  loop to keep picking up new issues. Use when the user wants to "work through",
-  "process", "triage and answer", "clear", or "run a factory loop over" the
-  issues in a GitHub repo, or asks to handle issues one-by-one automatically.
-  Takes a repo as owner/name or a GitHub URL.
+  end-to-end by TAKING ACTION (creating files, projects, features — not just
+  answering): claim with 👀, do the work, verify it, comment the result, then
+  close the issue. Build/feature tickets go through clarify → plan → approval →
+  build → browser-verify (chrome-devtools) → screenshot-on-ticket. Changes are
+  committed & pushed automatically by a Stop hook. Never takes destructive
+  actions. Use when the user wants to "work through", "process", "run a factory
+  loop over", or otherwise handle the issues in a GitHub repo. Takes a repo as
+  owner/name or a GitHub URL.
 ---
 
 # Factory Loop
 
 An assembly line for GitHub issues. Given a repository, it works each open issue
-through the same stations — **claim → work → answer → close** — and can repeat on
-an interval to catch new ones.
+through the same stations — **claim → do the work → verify → answer → close** —
+and can repeat on an interval to catch new ones.
+
+**Core principle: take action, don't just answer.** If a ticket asks for a file,
+a project, a feature, or a change, *build it* — don't merely describe it. The
+only exception is a ticket that is genuinely a pure question.
 
 ## Inputs
 
-- **Repo** (required): `owner/name` or a GitHub URL
-  (e.g. `https://github.com/owner/name`). Parse the URL down to `owner/name`.
-- **Filter** (optional): label, assignee, or issue number range. Default: all
-  open issues.
-- **Interval** (optional): if the user wants it to keep running (e.g. "every
-  10 min"), drive it with the `/loop` skill — see "Running on a loop" below.
+- **Repo** (required): `owner/name` or a GitHub URL. Parse a URL down to `owner/name`.
+- **Filter** (optional): label, assignee, or issue-number range. Default: all open issues.
+- **Interval** (optional): to keep running, drive it with `/loop` (see "On a loop").
 
 ## Preflight: authentication
 
-Writing to issues (reactions, comments, close/reopen) requires an authenticated
-`gh`. Reading a **public** repo does not.
+Writes (reactions, comments, close/reopen) need an authenticated `gh`; reading a
+public repo does not.
 
-1. Check access: `gh auth status`. If not logged in, ask the user to run
-   `! gh auth login` (GitHub.com → HTTPS → login with browser).
-2. **Enterprise Managed User (EMU) gotcha** — if a write returns
-   `403: As an Enterprise Managed User, you cannot access this content`, the
-   logged-in account is a corporate EMU identity sandboxed to its own
-   enterprise and **cannot write to repos outside it** (even public ones). Ask
-   the user to `! gh auth logout` then `! gh auth login` with a **personal**
-   account that has access to the repo, and retry.
-3. Reading a public repo with no auth works via the unauthenticated API — fine
-   for the fetch step, but every write still needs a valid account.
+1. `gh auth status`. If not logged in, ask the user to run `! gh auth login`.
+2. **EMU gotcha** — a `403: As an Enterprise Managed User, you cannot access this
+   content` means the logged-in account is a corporate EMU sandboxed to its own
+   enterprise and cannot write to outside repos. Ask the user to log in with a
+   **personal** account that has access, and retry.
+3. First-time git push may hang on the `manager` credential helper. Run
+   `gh auth setup-git` once so git uses the `gh` token non-interactively.
 
 ## The line (per issue)
 
@@ -48,72 +48,106 @@ Writing to issues (reactions, comments, close/reopen) requires an authenticated
 ```bash
 gh issue list --repo <owner>/<name> --state open --limit 100
 ```
+Public-repo fallback if `gh` can't read: `curl -s ".../issues?state=open&per_page=100"`,
+ignoring any item with a `pull_request` key.
 
-If `gh` can't read it but the repo is public, fall back to the REST API:
-`curl -s "https://api.github.com/repos/<owner>/<name>/issues?state=open&per_page=100"`
-and ignore any item that has a `pull_request` key (those are PRs, not issues).
+**Skip issues already carrying your 👀** — EXCEPT a 👀-claimed issue that is still
+open and not yet commented/closed: that one was claimed but interrupted, so
+*finish* it rather than skip it.
 
-Show the user the queue (number, title, author) and confirm scope before doing
-destructive work (commenting/closing) across many issues.
-
-### 1. Claim it — 👀 react (work-in-progress signal)
-
-```bash
-gh api --method POST \
-  repos/<owner>/<name>/issues/<n>/reactions \
-  -H "Accept: application/vnd.github+json" \
-  -f content=eyes
-```
-
-`eyes` (👀) is the convention for "we're on it". Other valid contents:
-`+1 -1 laugh confused heart hooray rocket`.
-
-### 2. Do the work
-
-Read the issue body and figure out what it actually asks. Research as needed
-(web search, code inspection, etc.). If the issue is ambiguous, ask the user
-rather than guessing. Keep the answer accurate and concise.
-
-### 3. Answer — post a comment
+### 1. Claim it — 👀 react
 
 ```bash
-gh issue comment <n> --repo <owner>/<name> --body "<your answer, markdown ok>"
+gh api --method POST repos/<owner>/<name>/issues/<n>/reactions \
+  -H "Accept: application/vnd.github+json" -f content=eyes
 ```
 
-For multi-line bodies in PowerShell use a single-quoted here-string; in Bash use
-a quoted heredoc via `--body-file -` or `--body @'...'@`. Make the comment
-self-contained (state the answer, then supporting detail).
+### 2. Do the work — classify first
 
-### 4. Close it
+- **Pure question** → research and answer in the comment (step 4).
+- **Build / feature / file / project** → run the **Build workflow** below. One
+  project per folder, per the repo's root `CLAUDE.md`; register new projects in
+  that index and keep it under 100 lines.
+
+### 3. Verify
+
+For anything with runtime behavior (a web app/page/feature), **verify it in a
+real browser with chrome-devtools** before closing — see the Build workflow.
+For non-runtime work, sanity-check the output (e.g. simulate core logic).
+
+### 4. Answer — comment the result
+
+```bash
+gh issue comment <n> --repo <owner>/<name> --body "<what you did, links, screenshot>"
+```
+State what was built/changed, link the files, and embed the screenshot (Build
+workflow). Multi-line bodies: PowerShell single-quoted here-string, or Bash
+`--body @'...'@`.
+
+### 5. Close it
 
 ```bash
 gh issue close <n> --repo <owner>/<name>
 ```
 
-Reopen if needed: `gh issue reopen <n> --repo <owner>/<name>`.
+## Build workflow (build / feature tickets)
 
-## Running on a loop
+1. **Clarify.** Ask questions to surface and confirm assumptions before building.
+2. **Plan.** Propose a concise plan of what you'll build and how.
+3. **Get approval.** Do **not** start building until the plan is approved.
+4. **Build.** Implement it. Extend existing projects non-destructively; migrate
+   data forward (preserve old data) rather than wiping it.
+5. **Browser-verify with chrome-devtools.** Open the running app/feature (a local
+   `file://` path or dev server), exercise the new behavior, and confirm it works.
+6. **Screenshot on the ticket.** Save screenshot(s) into the repo (e.g.
+   `<project>/screenshots/ticket-<n>-*.png`) and embed them in the closing
+   comment via a raw URL:
+   `![ticket-<n>](https://raw.githubusercontent.com/<owner>/<name>/<branch>/<path>.png)`.
 
-To keep processing new issues over time, hand off to the `/loop` skill with an
-interval, e.g.:
+### Attended vs unattended
+
+The loop often runs unattended on a cron, where no one can answer questions or
+approve a plan. So:
+
+- **Unattended (cron/loop firing):** for a build ticket, **pause for approval** —
+  claim it (👀), post the clarifying questions **and** the proposed plan as an
+  issue comment, and **stop there**. Do not build, do not close. The ticket stays
+  open awaiting the user. Next run: if the user has replied/approved in the
+  thread, proceed to build/verify/screenshot/close; otherwise skip (still claimed).
+- **Attended (user invoked `/factory-loop` and is present):** ask the questions
+  and get plan approval in the live session, then build straight through.
+
+Pure-question tickets never need approval — answer and close in either mode.
+
+## Commit & push
+
+Committing and pushing is **automatic** — a `Stop` hook commits all changes and
+pushes the current branch on every stop. So the loop's job is to *create the
+files and update the issue*; you do not need to run `git commit`/`git push`
+yourself. Consequence: a closing comment should reference `main` generally rather
+than a specific commit hash (the push lands when the turn stops), and embedded
+screenshot links resolve once that push completes.
+
+## Guardrails — never destructive
+
+- **No destruction.** Never delete or overwrite files/projects you didn't create
+  without explicit approval; never `reset --hard`, force-push, rebase, rewrite
+  history, or delete branches/tags/issues. Only additive git ops (handled by the
+  Stop hook).
+- **Extend, don't clobber.** Enhancing a project means adding to it and migrating
+  data forward, not replacing working code or wiping stored data.
+- **Confirm before bulk writes.** Reacting is cheap; mass comment/close is not.
+  Summarize across N issues and get a go-ahead unless told "process everything".
+- **Idempotency.** Re-list before acting so you don't double-process an issue.
+- **Report faithfully.** List each issue and what happened (claimed / built /
+  verified / answered / closed / paused-for-approval / skipped-and-why) with URLs.
+- **Right account.** Use a GitHub account with write access to the target repo.
+
+## On a loop
 
 ```
 /loop 10m run factory-loop over <owner>/<name>
 ```
-
-Each firing re-fetches open issues and runs the line on anything new. Skip
-issues that already carry your 👀 reaction (or are assigned/labeled as
-in-progress) so you don't double-process. Stop the loop with CronDelete (the
-loop skill reports the job ID) or by telling Claude to "stop the loop".
-
-## Guardrails
-
-- **Confirm before bulk writes.** Reacting is cheap; mass-commenting and closing
-  is not. Summarize what you'll do across N issues and get a go-ahead unless the
-  user already said "process everything".
-- **Idempotency.** Before reacting/commenting, you may re-list to avoid repeating
-  work on an issue already handled this run.
-- **Report outcomes faithfully.** List each issue and what happened
-  (reacted / answered / closed / skipped-and-why). Link the issue URLs.
-- **One account, right scope.** Use a GitHub account that actually has write
-  access to the target repo (see the EMU note above).
+Each firing re-fetches open issues and runs the line on anything new, pausing
+build tickets for approval as above. Stop with CronDelete (the loop reports the
+job ID) or by telling Claude to "stop the loop".
