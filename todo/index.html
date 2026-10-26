@@ -6,8 +6,8 @@
   <title>Todo</title>
   <style>
     :root {
-      --bg: #0f1221; --card: #191d30; --line: #2a2f48;
-      --text: #e8ebf5; --muted: #9aa2c0; --accent: #6c8cff; --danger: #ff6b7a;
+      --bg: #0f1221; --card: #191d30; --line: #2a2f48; --chip: #242a44;
+      --text: #e8ebf5; --muted: #9aa2c0; --accent: #6c8cff; --danger: #ff6b7a; --warn: #ffb020;
     }
     * { box-sizing: border-box; }
     body {
@@ -15,30 +15,43 @@
       font: 16px/1.5 system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
       display: flex; justify-content: center; padding: 48px 16px;
     }
-    main { width: 100%; max-width: 480px; }
+    main { width: 100%; max-width: 560px; }
     h1 { font-size: 1.6rem; margin: 0 0 4px; }
     p.sub { color: var(--muted); margin: 0 0 24px; font-size: .9rem; }
-    form { display: flex; gap: 8px; margin-bottom: 20px; }
-    input[type=text] {
-      flex: 1; padding: 12px 14px; border-radius: 10px; border: 1px solid var(--line);
-      background: var(--card); color: var(--text); font-size: 1rem;
+
+    form { display: grid; grid-template-columns: 1fr auto; gap: 8px; margin-bottom: 18px; }
+    .row2 { display: flex; gap: 8px; grid-column: 1 / -1; }
+    input, select, button { font-size: 1rem; border-radius: 10px; }
+    input[type=text], input[type=date], select {
+      padding: 11px 13px; border: 1px solid var(--line); background: var(--card); color: var(--text);
     }
-    input[type=text]:focus { outline: 2px solid var(--accent); border-color: transparent; }
-    button { cursor: pointer; border: none; border-radius: 10px; font-size: 1rem; }
-    .add { padding: 12px 18px; background: var(--accent); color: #fff; font-weight: 600; }
+    #text { width: 100%; }
+    #due { flex: none; color-scheme: dark; }
+    #tags { flex: 1; }
+    input:focus, select:focus { outline: 2px solid var(--accent); border-color: transparent; }
+    button { cursor: pointer; border: none; }
+    .add { padding: 11px 18px; background: var(--accent); color: #fff; font-weight: 600; }
+
+    .filters { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 16px; }
+    .seg { display: inline-flex; background: var(--card); border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
+    .seg button { padding: 8px 14px; background: none; color: var(--muted); border-radius: 0; }
+    .seg button.on { background: var(--accent); color: #fff; }
+    .filters select { padding: 8px 12px; }
+    .spacer { flex: 1; }
+
     ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
-    li {
-      display: flex; align-items: center; gap: 12px; padding: 12px 14px;
-      background: var(--card); border: 1px solid var(--line); border-radius: 10px;
-    }
-    li .box {
-      width: 22px; height: 22px; border-radius: 6px; border: 2px solid var(--muted);
-      display: grid; place-items: center; cursor: pointer; flex: none; background: none; color: var(--accent);
-    }
+    li { display: flex; align-items: flex-start; gap: 12px; padding: 12px 14px; background: var(--card); border: 1px solid var(--line); border-radius: 10px; }
+    li .box { width: 22px; height: 22px; margin-top: 2px; border-radius: 6px; border: 2px solid var(--muted); display: grid; place-items: center; cursor: pointer; flex: none; background: none; color: var(--accent); }
     li.done .box { border-color: var(--accent); background: var(--accent); color: #fff; }
-    li .label { flex: 1; word-break: break-word; }
+    .body { flex: 1; min-width: 0; }
+    .label { word-break: break-word; }
     li.done .label { text-decoration: line-through; color: var(--muted); }
-    li .del { background: none; color: var(--danger); padding: 6px 8px; font-size: 1.1rem; }
+    .meta { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+    .badge { font-size: .74rem; padding: 2px 8px; border-radius: 999px; background: var(--chip); color: var(--muted); }
+    .badge.due { color: #cdd3ee; }
+    .badge.overdue { background: rgba(255,107,122,.15); color: var(--danger); }
+    .tag { font-size: .74rem; padding: 2px 8px; border-radius: 999px; background: rgba(108,140,255,.15); color: #aab9ff; cursor: pointer; }
+    li .del { background: none; color: var(--danger); padding: 4px 8px; font-size: 1.1rem; flex: none; }
     .empty { color: var(--muted); text-align: center; padding: 32px 0; }
     footer { color: var(--muted); font-size: .8rem; text-align: center; margin-top: 20px; }
   </style>
@@ -49,38 +62,103 @@
     <p class="sub">Tasks are saved in your browser (localStorage) — no server, no account.</p>
 
     <form id="form">
-      <input id="input" type="text" placeholder="Add a task…" autocomplete="off" aria-label="New task" />
+      <input id="text" type="text" placeholder="Add a task…" autocomplete="off" aria-label="Task text" />
       <button class="add" type="submit">Add</button>
+      <div class="row2">
+        <input id="due" type="date" aria-label="Due date" />
+        <input id="tags" type="text" placeholder="tags, comma separated" autocomplete="off" aria-label="Tags" />
+      </div>
     </form>
 
+    <div class="filters">
+      <div class="seg" id="statusSeg" role="group" aria-label="Status filter">
+        <button type="button" data-status="all" class="on">All</button>
+        <button type="button" data-status="active">Active</button>
+        <button type="button" data-status="completed">Completed</button>
+      </div>
+      <div class="spacer"></div>
+      <select id="tagFilter" aria-label="Filter by tag"><option value="">All tags</option></select>
+    </div>
+
     <ul id="list"></ul>
-    <p class="empty" id="empty" hidden>Nothing here yet. Add your first task above.</p>
+    <p class="empty" id="empty" hidden>Nothing matches. Add a task or clear the filters.</p>
     <footer id="count"></footer>
   </main>
 
   <script>
-    // --- Client-side "database": localStorage-backed store ---
-    const KEY = "todo.items.v1";
+    // --- Client-side "database": localStorage, schema v2 (adds due date + tags) ---
+    const KEY = "todo.items.v2";
+    const OLD = "todo.items.v1";
+
+    function load() {
+      let raw = localStorage.getItem(KEY);
+      if (raw == null) {
+        // migrate v1 (text/done only) -> v2 shape
+        try {
+          const old = JSON.parse(localStorage.getItem(OLD)) || [];
+          const migrated = old.map(i => ({ id: i.id, text: i.text, done: !!i.done, due: null, tags: [] }));
+          if (migrated.length) localStorage.setItem(KEY, JSON.stringify(migrated));
+          return migrated;
+        } catch { return []; }
+      }
+      try { return JSON.parse(raw) || []; } catch { return []; }
+    }
+
     const db = {
-      all() { try { return JSON.parse(localStorage.getItem(KEY)) || []; } catch { return []; } },
+      all() { return load(); },
       save(items) { localStorage.setItem(KEY, JSON.stringify(items)); },
-      add(text) { const items = db.all(); items.unshift({ id: genId(items), text, done: false }); db.save(items); },
-      toggle(id) { const items = db.all().map(i => i.id === id ? { ...i, done: !i.done } : i); db.save(items); },
+      add(text, due, tags) {
+        const items = db.all();
+        items.unshift({ id: genId(items), text, done: false, due: due || null, tags: tags || [] });
+        db.save(items);
+      },
+      toggle(id) { db.save(db.all().map(i => i.id === id ? { ...i, done: !i.done } : i)); },
       remove(id) { db.save(db.all().filter(i => i.id !== id)); },
     };
-    // Deterministic id (no Math.random / Date needed): one higher than current max.
     function genId(items) { return items.reduce((m, i) => Math.max(m, i.id), 0) + 1; }
+
+    // --- UI state ---
+    let statusFilter = "all";   // all | active | completed
+    let tagFilter = "";          // "" = all tags
 
     const list = document.getElementById("list");
     const empty = document.getElementById("empty");
     const count = document.getElementById("count");
-    const input = document.getElementById("input");
+    const tagFilterEl = document.getElementById("tagFilter");
+
+    function todayStr() {
+      const d = new Date();
+      return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
+    }
+    function allTags(items) {
+      return [...new Set(items.flatMap(i => i.tags || []))].sort();
+    }
+    function matches(i) {
+      if (statusFilter === "active" && i.done) return false;
+      if (statusFilter === "completed" && !i.done) return false;
+      if (tagFilter && !(i.tags || []).includes(tagFilter)) return false;
+      return true;
+    }
+
+    function renderTagFilter(items) {
+      const tags = allTags(items);
+      const prev = tagFilter;
+      tagFilterEl.innerHTML = '<option value="">All tags</option>' +
+        tags.map(t => `<option value="${t}">#${t}</option>`).join("");
+      tagFilterEl.value = tags.includes(prev) ? prev : "";
+      tagFilter = tagFilterEl.value;
+    }
 
     function render() {
       const items = db.all();
+      renderTagFilter(items);
+      const shown = items.filter(matches);
+      const today = todayStr();
+
       list.innerHTML = "";
-      empty.hidden = items.length > 0;
-      for (const item of items) {
+      empty.hidden = shown.length > 0;
+
+      for (const item of shown) {
         const li = document.createElement("li");
         li.className = item.done ? "done" : "";
 
@@ -90,29 +168,67 @@
         box.textContent = item.done ? "✓" : "";
         box.onclick = () => { db.toggle(item.id); render(); };
 
-        const label = document.createElement("span");
+        const body = document.createElement("div");
+        body.className = "body";
+        const label = document.createElement("div");
         label.className = "label"; label.textContent = item.text;
+        body.appendChild(label);
+
+        const meta = document.createElement("div");
+        meta.className = "meta";
+        if (item.due) {
+          const overdue = !item.done && item.due < today;
+          const b = document.createElement("span");
+          b.className = "badge due" + (overdue ? " overdue" : "");
+          b.textContent = (overdue ? "⚠ due " : "📅 ") + item.due;
+          meta.appendChild(b);
+        }
+        for (const t of (item.tags || [])) {
+          const chip = document.createElement("span");
+          chip.className = "tag"; chip.textContent = "#" + t;
+          chip.title = "Filter by #" + t;
+          chip.onclick = () => { tagFilter = t; tagFilterEl.value = t; render(); };
+          meta.appendChild(chip);
+        }
+        if (meta.children.length) body.appendChild(meta);
 
         const del = document.createElement("button");
         del.className = "del"; del.type = "button"; del.setAttribute("aria-label", "Delete task");
         del.textContent = "✕";
         del.onclick = () => { db.remove(item.id); render(); };
 
-        li.append(box, label, del);
+        li.append(box, body, del);
         list.appendChild(li);
       }
+
       const left = items.filter(i => !i.done).length;
-      count.textContent = items.length ? `${left} of ${items.length} remaining` : "";
+      const filtered = (statusFilter !== "all" || tagFilter) ? ` · showing ${shown.length}` : "";
+      count.textContent = items.length ? `${left} of ${items.length} remaining${filtered}` : "";
     }
 
+    // --- events ---
     document.getElementById("form").addEventListener("submit", (e) => {
       e.preventDefault();
-      const text = input.value.trim();
+      const textEl = document.getElementById("text");
+      const dueEl = document.getElementById("due");
+      const tagsEl = document.getElementById("tags");
+      const text = textEl.value.trim();
       if (!text) return;
-      db.add(text);
-      input.value = "";
+      const tags = tagsEl.value.split(",").map(s => s.trim().replace(/^#/, "")).filter(Boolean);
+      db.add(text, dueEl.value || null, tags);
+      textEl.value = ""; dueEl.value = ""; tagsEl.value = "";
       render();
     });
+
+    document.getElementById("statusSeg").addEventListener("click", (e) => {
+      const btn = e.target.closest("button[data-status]");
+      if (!btn) return;
+      statusFilter = btn.dataset.status;
+      for (const b of document.querySelectorAll("#statusSeg button")) b.classList.toggle("on", b === btn);
+      render();
+    });
+
+    tagFilterEl.addEventListener("change", () => { tagFilter = tagFilterEl.value; render(); });
 
     render();
   </script>
