@@ -28,6 +28,7 @@
     #text { width: 100%; }
     #due { flex: none; color-scheme: dark; }
     #tags { flex: 1; min-width: 120px; }
+    #search { width: 100%; margin-bottom: 12px; }
     input:focus, select:focus { outline: 2px solid var(--accent); border-color: transparent; }
     button { cursor: pointer; border: none; }
     .add { padding: 11px 18px; background: var(--accent); color: #fff; font-weight: 600; }
@@ -95,6 +96,8 @@
         </select>
       </div>
     </form>
+
+    <input id="search" type="text" placeholder="Search tasks…" autocomplete="off" aria-label="Search tasks" />
 
     <div class="filters">
       <div class="seg" id="statusSeg" role="group" aria-label="Status filter">
@@ -193,6 +196,7 @@
     let statusFilter = "all";
     let tagFilter = "";
     let priorityFilter = "";
+    let searchQuery = "";
     let editingId = null;
 
     const list = document.getElementById("list");
@@ -209,6 +213,12 @@
       if (statusFilter === "completed" && !i.done) return false;
       if (tagFilter && !(i.tags || []).includes(tagFilter)) return false;
       if (priorityFilter && (i.priority || "medium") !== priorityFilter) return false;
+      if (searchQuery) {
+        const q = searchQuery.toLowerCase();
+        const inText = (i.text || "").toLowerCase().includes(q);
+        const inTags = (i.tags || []).some(t => String(t).toLowerCase().includes(q));
+        if (!inText && !inTags) return false;
+      }
       return true;
     }
 
@@ -330,7 +340,7 @@
       }
 
       const left = items.filter(i => !i.done).length;
-      const filtered = (statusFilter !== "all" || tagFilter || priorityFilter) ? ` · showing ${shown.length}` : "";
+      const filtered = (statusFilter !== "all" || tagFilter || priorityFilter || searchQuery) ? ` · showing ${shown.length}` : "";
       count.textContent = items.length ? `${left} of ${items.length} remaining${filtered}` : "";
     }
 
@@ -359,6 +369,7 @@
 
     tagFilterEl.addEventListener("change", () => { tagFilter = tagFilterEl.value; render(); });
     priorityFilterEl.addEventListener("change", () => { priorityFilter = priorityFilterEl.value; render(); });
+    document.getElementById("search").addEventListener("input", (e) => { searchQuery = e.target.value.trim(); render(); });
 
     render();
   </script>
