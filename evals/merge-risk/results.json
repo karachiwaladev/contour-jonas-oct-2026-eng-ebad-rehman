@@ -1,0 +1,44 @@
+{
+  "eval": "merge-risk",
+  "score": 0.833,
+  "total": 6,
+  "passed": 5,
+  "cases": [
+    {
+      "id": "docs-typo",
+      "pass": true,
+      "expected": "low",
+      "computed": "low"
+    },
+    {
+      "id": "todo-feature",
+      "pass": true,
+      "expected": "medium",
+      "computed": "medium"
+    },
+    {
+      "id": "big-refactor",
+      "pass": true,
+      "expected": "high",
+      "computed": "high"
+    },
+    {
+      "id": "delete-module",
+      "pass": true,
+      "expected": "high",
+      "computed": "high"
+    },
+    {
+      "id": "config-change",
+      "pass": true,
+      "expected": "medium",
+      "computed": "medium"
+    },
+    {
+      "id": "subtle-auth-change",
+      "pass": false,
+      "expected": "high",
+      "computed": "low"
+    }
+  ]
+}

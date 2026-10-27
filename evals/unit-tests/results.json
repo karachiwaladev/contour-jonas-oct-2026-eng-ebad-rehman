@@ -1,0 +1,44 @@
+{
+  "eval": "unit-tests",
+  "score": 0.833,
+  "total": 6,
+  "passed": 5,
+  "cases": [
+    {
+      "id": "jest-suite",
+      "pass": true,
+      "expected": true,
+      "detected": true
+    },
+    {
+      "id": "node-assert",
+      "pass": true,
+      "expected": true,
+      "detected": true
+    },
+    {
+      "id": "pytest",
+      "pass": true,
+      "expected": true,
+      "detected": true
+    },
+    {
+      "id": "impl-only",
+      "pass": true,
+      "expected": false,
+      "detected": false
+    },
+    {
+      "id": "todo-snippet-no-tests",
+      "pass": true,
+      "expected": false,
+      "detected": false
+    },
+    {
+      "id": "custom-assert-helper",
+      "pass": false,
+      "expected": true,
+      "detected": false
+    }
+  ]
+}

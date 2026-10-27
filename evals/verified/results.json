@@ -1,0 +1,44 @@
+{
+  "eval": "verified",
+  "score": 0.833,
+  "total": 6,
+  "passed": 5,
+  "cases": [
+    {
+      "id": "full-verify",
+      "pass": true,
+      "expected": true,
+      "detected": true
+    },
+    {
+      "id": "pushed-no-verify",
+      "pass": true,
+      "expected": false,
+      "detected": false
+    },
+    {
+      "id": "devtools-shot",
+      "pass": true,
+      "expected": true,
+      "detected": true
+    },
+    {
+      "id": "tests-only",
+      "pass": true,
+      "expected": false,
+      "detected": false
+    },
+    {
+      "id": "claim-no-evidence",
+      "pass": true,
+      "expected": false,
+      "detected": false
+    },
+    {
+      "id": "gif-evidence",
+      "pass": false,
+      "expected": true,
+      "detected": false
+    }
+  ]
+}

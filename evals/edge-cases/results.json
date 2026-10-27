@@ -1,0 +1,51 @@
+{
+  "eval": "edge-cases",
+  "score": 0.833,
+  "threshold": 0.5,
+  "total": 6,
+  "passed": 5,
+  "cases": [
+    {
+      "id": "due-date",
+      "pass": true,
+      "recall": 1,
+      "found": 4,
+      "of": 4
+    },
+    {
+      "id": "tags",
+      "pass": true,
+      "recall": 0.5,
+      "found": 2,
+      "of": 4
+    },
+    {
+      "id": "priority",
+      "pass": true,
+      "recall": 1,
+      "found": 3,
+      "of": 3
+    },
+    {
+      "id": "recurrence",
+      "pass": true,
+      "recall": 0.5,
+      "found": 2,
+      "of": 4
+    },
+    {
+      "id": "filter-combination",
+      "pass": false,
+      "recall": 0.333,
+      "found": 1,
+      "of": 3
+    },
+    {
+      "id": "edit",
+      "pass": true,
+      "recall": 1,
+      "found": 3,
+      "of": 3
+    }
+  ]
+}

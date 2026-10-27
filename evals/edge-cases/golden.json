@@ -1,0 +1,11 @@
+{
+  "description": "Golden set: edge cases a good test-generator should surface per feature.",
+  "features": {
+    "due-date":          ["past date", "today", "far future", "empty"],
+    "tags":              ["empty", "duplicate", "special chars", "very long"],
+    "priority":          ["invalid value", "missing", "all same"],
+    "recurrence":        ["month overflow (Jan 31)", "no due date", "complete twice", "leap year"],
+    "filter-combination":["status+tag+priority all set", "no matches", "all filtered out"],
+    "edit":              ["empty text save", "cancel discards", "change all fields"]
+  }
+}

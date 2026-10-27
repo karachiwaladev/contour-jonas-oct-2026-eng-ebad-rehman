@@ -90,11 +90,15 @@ that index and keep it under 100 lines.
    server or served locally), exercise the new behavior, and confirm it works.
 7. **Screenshots.** Save screenshot(s) into the repo (e.g.
    `<project>/screenshots/ticket-<n>-*.png`).
-8. **Open a PR.** `gh pr create --base main --head ticket-<n>-<slug>` with a body
-   that summarizes the work, embeds the screenshots (raw URLs), and includes
+8. **Run evals.** After **every build**, run `node evals/run-all.js` — this runs
+   `unit-tests`, `merge-risk`, `verified`, and `edge-cases` and writes each
+   `evals/<name>/results.json`. **Commit those results.json files.** See "Evals".
+9. **Open a PR.** `gh pr create --base main --head ticket-<n>-<slug>` with a body
+   that summarizes the work, embeds the screenshots (raw URLs), **reports the
+   unit-tests and merge-risk scores (and the QA eval scores)**, and includes
    `Closes #<n>` so the merge auto-closes the ticket. Then **comment on the issue
-   linking the PR**.
-9. **WAIT for manual review & approval.** Do **not** merge and do **not** close
+   linking the PR and reporting the eval scores**.
+10. **WAIT for manual review & approval.** Do **not** merge and do **not** close
    the ticket yourself. The human reviews, approves, and merges the PR; the merge
    (via `Closes #<n>`) closes the ticket. Until then the issue stays open &
    claimed, and later loop runs skip it (awaiting review).
@@ -123,6 +127,22 @@ branch *first* (step 4) and the hook will push it; you don't run `git commit`/
 `git push` yourself. `main` is only updated by **merging an approved PR**, never
 by a direct push of ticket work. Embedded screenshot links resolve once the
 branch push completes.
+
+## Evals
+
+The repo ships evals under `evals/<name>/`, each writing its last run to
+`evals/<name>/results.json` in the shape `{"score": 0.83, "cases":[{"id":"…","pass":true}]}`.
+
+- **Engineering:** `unit-tests` (did the build include unit tests?) and
+  `merge-risk` (how risky is the PR to merge?).
+- **QA:** `verified` (did we actually browser-verify with evidence?) and
+  `edge-cases` (does our test-generator find the important edge cases? — its
+  golden set lives in `evals/edge-cases/golden.json`).
+
+**After every build:** run `node evals/run-all.js`, **commit all four
+`results.json`**, and **report the `unit-tests` and `merge-risk` scores (plus the
+QA scores)** in the ticket reply and PR body. Each eval keeps ≥5 cases with at
+least one pass and one fail so the score stays meaningful.
 
 ## Guardrails — never destructive
 
