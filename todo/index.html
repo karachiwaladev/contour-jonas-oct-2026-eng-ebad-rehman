@@ -329,9 +329,10 @@
         list.appendChild(li);
       }
 
-      const left = items.filter(i => !i.done).length;
+      const open = items.filter(i => !i.done).length;
+      const done = items.length - open;
       const filtered = (statusFilter !== "all" || tagFilter || priorityFilter) ? ` · showing ${shown.length}` : "";
-      count.textContent = items.length ? `${left} of ${items.length} remaining${filtered}` : "";
+      count.textContent = items.length ? `${open} open · ${done} done · ${items.length} total${filtered}` : "";
     }
 
     // --- events ---
