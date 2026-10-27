@@ -1,2 +1,6 @@
+# Secrets — never commit
+.env
+.env.*
+
 # Transient Claude Code session artifacts
 .claude/scheduled_tasks.lock
